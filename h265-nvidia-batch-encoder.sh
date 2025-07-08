@@ -37,7 +37,26 @@ AUDIO_BITRATE="256k"
 CQ="30"
 
 # Encoding preset (speed vs. quality trade-off)
+# -------------------------------------------------------
+# This option controls the speed/efficiency of the encoder.
+# Available presets depend on the encoder used (e.g., hevc_nvenc).
+# 
+# For NVIDIA NVENC (used with "hevc_nvenc"), typical presets are:
+#   - p1: **slowest**, highest quality and compression
+#   - p2
+#   - p3: balanced quality/speed (default)
+#   - p4
+#   - p5
+#   - p6
+#   - p7: **fastest**, lower compression (larger files)
+#
+# Notes:
+# - Lower preset number = better quality per bitrate, but slower.
+# - Higher preset number = faster, but larger output files.
+# - p3 is a good middle ground for general use.
+# - If using CPU encoding (e.g., "libx265"), presets are named differently (e.g., "ultrafast", "slow", etc.)
 ENCODE_PRESET="p3"
+
 
 # =====================
 # Function Definitions
