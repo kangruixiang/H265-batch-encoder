@@ -100,7 +100,7 @@ build_ffmpeg_command() {
 
   ffmpeg -y "${ffmpeg_opts[@]}" \
     -i "$input_file" \
-    -map 0:v -map 0:a? -map 0:s? \
+    -map 0:v -map 0:a? -map 0:s? -hide_banner -loglevel error -stats \
     -c:v "$VIDEO_CODEC" -preset "$ENCODE_PRESET" -rc vbr -cq "$CQ" \
     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
     -c:s copy \
