@@ -39,7 +39,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 ```bash
 ./h265-nvidia-batch-encoder.sh [-R] [min=X] <folder>
 ```
-## Example
+### How it will look
 
 ```bash
 Scanning...
