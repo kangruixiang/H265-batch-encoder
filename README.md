@@ -1,8 +1,8 @@
-# Video Re-encoding Script (with HEVC/AV1 Detection & Recompression)
+# H265 Video Re-encoding Script (with HEVC/AV1 Detection & Recompression)
 
 ## 📦 Description
 
-This Bash script scans a folder (optionally recursively) for video files (`*.mkv`, `*.avi`, `*.mp4`, `*.mov`, `*.wmv`, `*.flv`) that are **not** already encoded in HEVC (H.265) or AV1 format. It performs a **5-second test encoding** to estimate final file size. If the estimated encoded file is at least **20% smaller** than the original, it performs a full re-encoding using **GPU acceleration (CUDA)** via `ffmpeg`, replacing the original file if the new one is smaller.
+This Bash script scans a folder (optionally recursively) for video files (`*.mkv`, `*.avi`, `*.mp4`, `*.mov`, `*.wmv`, `*.flv`) that are **not** already encoded in HEVC (H.265) or AV1 format. It performs a **5-second test encoding** to estimate final file size. If the estimated encoded file is at least **30% smaller** than the original, it performs a full re-encoding using **GPU acceleration (CUDA)** via `ffmpeg`, replacing the original file if the new one is smaller.
 
 ## 🎯 Features
 
