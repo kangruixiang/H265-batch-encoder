@@ -24,13 +24,69 @@ set -e
 # ===========================
 # User Configuration Section
 # ===========================
+
+# Enable hardware acceleration (true/false)
+# true  = use GPU for decoding/encoding (faster, lower CPU usage)
+# false = use CPU only (slower, but more widely supported)
 USE_HWACCEL=true
+
+# Hardware acceleration type
+# Common options:
+# - "cuda"  = NVIDIA GPUs (NVENC)
+# - "vaapi" = Intel/AMD GPUs on Linux
+# - "qsv"   = Intel QuickSync Video
 HWACCEL_TYPE="cuda"
+
+# Video codec to use for encoding
+# Options:
+# - "hevc_nvenc"  = H.265 with NVIDIA NVENC (requires CUDA)
+# - "libx265"     = H.265 via CPU
+# - "hevc_vaapi"  = H.265 via VAAPI (hardware, Linux)
+# - "hevc_qsv"    = H.265 via Intel QuickSync (hardware)
 VIDEO_CODEC="hevc_nvenc"
+
+# Audio codec to use
+# Most compatible option: "aac"
 AUDIO_CODEC="aac"
+
+# Target audio bitrate
+# Recommended: 128k (good), 192k (better), 256k+ (high quality)
 AUDIO_BITRATE="256k"
+
+# Constant quality factor for video (0–51)
+# Lower = better quality, bigger file
+# Higher = lower quality, smaller file
+# - NVENC recommended range: 19–28
+# - libx265 recommended range: 18–28
 CQ="30"
+
+# Encoding preset — affects speed and compression efficiency
+# ⚠️ Available values depend on the selected VIDEO_CODEC
+
+# For hevc_nvenc (NVIDIA):
+#   "p1" = slowest, best quality
+#   "p2"
+#   "p3" = balanced (default)
+#   "p4"
+#   "p5"
+#   "p6"
+#   "p7" = fastest, lower quality
+
+# For libx265 (CPU encoder):
+#   "ultrafast", "superfast", "veryfast", "faster", "fast",
+#   "medium" (default), "slow", "slower", "veryslow", "placebo"
+#   Slower = better compression and quality, but takes longer
+
+# For hevc_vaapi (Linux hardware encoding):
+#   "veryfast", "fast", "medium", "slow" (not all drivers support all)
+
+# For hevc_qsv (Intel QuickSync):
+#   "veryfast", "faster", "fast", "medium", "slow", "slower"
+
 ENCODE_PRESET="p3"
+
+# Duration in seconds for test encoding (used to estimate file size before full encoding)
+# Helps skip files where re-encoding won’t reduce size significantly
 TEST_DURATION=5
 
 # =====================
