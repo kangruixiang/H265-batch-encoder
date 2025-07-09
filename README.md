@@ -50,7 +50,7 @@ Scanning...
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  Encoding test (5s)
 ├── Estimated size: 368.12 MB
-▶️  Full encoding: Totally Legal Episode.mkv
+▶️  Full encoding: Totally Legal S01E01.mkv
 frame=49613 fps= 76 q=23.0 Lsize=  589664kB time=00:34:27.39 bitrate=2336.5kbits/s speed=3.17x     
 ├── ✅ Replaced original
 ├── ✅ Size reduced: original = 1.39 GB | new = 575.84 MB | reduction = 59%
