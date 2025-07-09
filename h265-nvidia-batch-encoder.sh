@@ -10,7 +10,7 @@
 # Usage:
 #   ./script.sh [-R] [min=X] [test=Y] [--dry-run] <folder>
 #     -R          : Encode recursively inside subfolders
-#     min=X       : Ignore files smaller than X GB
+#     min=X.YZ       : Ignore files smaller than X.YZ GB
 #     test=Y      : Use Y seconds for the test encode (default: 5)
 #     --dry-run   : Only show compatible files without encoding
 #     -h          : Show this help message
@@ -150,7 +150,14 @@ DRY_RUN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -R) RECURSIVE=1; shift ;;
-    min=*) MIN_SIZE="${1#min=}"; shift ;;
+    
+    min=*)
+ 	 raw_min="${1#min=}"
+ 	 MIN_SIZE_BYTES=$(echo "$raw_min" | sed 's/,/./' | awk '{printf "%.0f", $1 * 1024 * 1024 * 1024}')
+  	shift
+ 	 ;;
+
+    
     test=*) TEST_DURATION="${1#test=}"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h) usage ;;
@@ -203,9 +210,7 @@ while IFS= read -r f; do
     continue
   fi
 
-  size_gb=$(( size_bytes / 1024 / 1024 / 1024 ))
-
-  (( MIN_SIZE > 0 && size_gb < MIN_SIZE )) && continue
+  (( MIN_SIZE_BYTES > 0 && size_bytes < MIN_SIZE_BYTES )) && continue
   if [[ -f "$list_file" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ "$line" == "$base" ]] && {
@@ -279,7 +284,7 @@ for f in "${candidates[@]}"; do
   [[ "$ext_lower" == "avi" || "$ext_lower" == "mp4" ]] && output_ext="mkv"
   tmp_file="$dir/.tmp_encode_${base%.*}.$output_ext"
 
-  echo "🔎 Encoding test (${TEST_DURATION}s)"
+  echo "🔎 Encoding sample (${TEST_DURATION}s)"
   if ! build_ffmpeg_command "$f" "$tmp_test" "$duration" test < /dev/null &> /dev/null; then
     echo "├── ❌ Test encoding failed"
     rm -f "$tmp_test"
@@ -297,7 +302,7 @@ for f in "${candidates[@]}"; do
     continue
   fi
 
-  echo "▶️  Full encoding: $base"
+  echo "▶️  Full encoding ($duration_view)"
   if ! build_ffmpeg_command "$f" "$tmp_file" "$duration" full < /dev/null; then
     echo "├── ❌ Full encoding failed"
     rm -f "$tmp_file"
