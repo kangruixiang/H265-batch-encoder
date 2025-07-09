@@ -8,10 +8,12 @@
 # optionally skipping already optimized files and ignoring small files.
 #
 # Usage:
-#   ./script.sh [-R] [min=X] <folder>
-#     -R      : Encode recursively inside subfolders
-#     min=X   : Ignore files smaller than X GB
-#     -h      : Show this help message
+#   ./script.sh [-R] [min=X] [test=Y] [--dry-run] <folder>
+#     -R          : Encode recursively inside subfolders
+#     min=X       : Ignore files smaller than X GB
+#     test=Y      : Use Y seconds for the test encode (default: 5)
+#     --dry-run   : Only show compatible files without encoding
+#     -h          : Show this help message
 
 set -e
 
@@ -26,14 +28,18 @@ USE_HWACCEL=true
 # Type of hardware acceleration: "cuda", "vaapi", "qsv", etc.
 HWACCEL_TYPE="cuda"
 
-# Video codec to use: "hevc_nvenc" (for CUDA), "libx265" (CPU), etc.
+# Video codec to use:
+# - "hevc_nvenc" for NVIDIA CUDA
+# - "libx265" for CPU encoding
 VIDEO_CODEC="hevc_nvenc"
 
 # Audio codec and bitrate
 AUDIO_CODEC="aac"
 AUDIO_BITRATE="256k"
 
-# Constant quality factor (lower = better quality, larger file; range 0–51)
+# Constant quality factor for video (0–51):
+# - Lower = better quality and larger file
+# - Higher = lower quality and smaller file
 CQ="30"
 
 # Encoding preset (speed vs. quality trade-off)
@@ -41,22 +47,20 @@ CQ="30"
 # This option controls the speed/efficiency of the encoder.
 # Available presets depend on the encoder used (e.g., hevc_nvenc).
 # 
-# For NVIDIA NVENC (used with "hevc_nvenc"), typical presets are:
-#   - p1: **slowest**, highest quality and compression
+# For NVIDIA NVENC:
+#   - p1: slowest, highest quality
 #   - p2
 #   - p3: balanced quality/speed (default)
 #   - p4
 #   - p5
 #   - p6
-#   - p7: **fastest**, lower compression (larger files)
+#   - p7: fastest, lowest compression
 #
-# Notes:
-# - Lower preset number = better quality per bitrate, but slower.
-# - Higher preset number = faster, but larger output files.
-# - p3 is a good middle ground for general use.
-# - If using CPU encoding (e.g., "libx265"), presets are named differently (e.g., "ultrafast", "slow", etc.)
+# Note: Lower numbers = slower but better quality
 ENCODE_PRESET="p3"
 
+# Duration of the test encode in seconds
+TEST_DURATION=5
 
 # =====================
 # Function Definitions
@@ -64,10 +68,12 @@ ENCODE_PRESET="p3"
 
 # Display help message
 usage() {
-  echo "Usage: $0 [-R] [min=X] <folder>"
-  echo "  -R      : Encode recursively"
-  echo "  min=X   : Skip files smaller than X GB"
-  echo "  -h      : Show this help message"
+  echo "Usage: $0 [-R] [min=X] [test=Y] [--dry-run] <folder>"
+  echo "  -R          : Encode recursively"
+  echo "  min=X       : Skip files smaller than X GB"
+  echo "  test=Y      : Use Y seconds for test encode (default: $TEST_DURATION)"
+  echo "  --dry-run   : Only show compatible files without encoding"
+  echo "  -h          : Show this help message"
   exit 0
 }
 
@@ -95,7 +101,7 @@ build_ffmpeg_command() {
   fi
 
   if [[ "$mode" == "test" ]]; then
-    ffmpeg_opts+=("-ss" "0" "-t" "2")
+    ffmpeg_opts+=("-ss" "0" "-t" "$TEST_DURATION")
   fi
 
   ffmpeg -y "${ffmpeg_opts[@]}" \
@@ -106,6 +112,22 @@ build_ffmpeg_command() {
     -c:s copy \
     "$output_file"
 }
+
+#Display nice frame when starting process
+print_boxed_message() {
+    local message="$1"
+    local padding=2
+    local length=${#message}
+    local width=$((length + padding * 2))
+    local top="┌$(printf '─%.0s' $(seq 1 "$width"))┐"
+    local bottom="└$(printf '─%.0s' $(seq 1 "$width"))┘"
+    local middle="│$(printf ' %.0s' $(seq 1 "$padding"))$message$(printf ' %.0s' $(seq 1 "$padding"))│"
+
+    echo "$top"
+    echo "$middle"
+    echo "$bottom"
+}
+
 
 # Check if hwaccel codec is available
 if [[ "$USE_HWACCEL" == "true" ]]; then
@@ -123,11 +145,14 @@ fi
 RECURSIVE=0
 MIN_SIZE=0
 FOLDER=""
+DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -R) RECURSIVE=1; shift ;;
     min=*) MIN_SIZE="${1#min=}"; shift ;;
+    test=*) TEST_DURATION="${1#test=}"; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
     -h) usage ;;
     *)
       if [[ -z "$FOLDER" ]]; then
@@ -154,47 +179,99 @@ find_cmd=(find "$FOLDER")
 find_cmd+=( -type f \( -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mp4' -o -iname '*.mov' -o -iname '*.wmv' -o -iname '*.flv' \) )
 
 # =====================
-# Main Processing Loop
+# Candidate Filtering
 # =====================
+echo "Scanning..."
+all_videos=0
+too_small=0
+already_h265_or_av1=0
+already_encoded=0
+corrupted_files=0
+
+candidates=()
 
 while IFS= read -r f; do
   dir=$(dirname "$f")
   base=$(basename "$f")
   list_file="$dir/encoded.list"
+  
+  all_videos=$((all_videos + 1))
+	echo -ne "\r├── $all_videos video files found / ${#candidates[@]} will be encoded"
 
-  size_bytes=$(stat -c%s "$f")
+  if ! size_bytes=$(stat -c%s "$f" 2>/dev/null); then
+    corrupted_files=$((corrupted_files + 1))
+    continue
+  fi
+
   size_gb=$(( size_bytes / 1024 / 1024 / 1024 ))
 
-  # Skip small files without recording
-  if (( MIN_SIZE > 0 && size_gb < MIN_SIZE )); then
-    echo "⚠️  File too small (<${MIN_SIZE}GB), skipping: $base"
-    continue
+  (( MIN_SIZE > 0 && size_gb < MIN_SIZE )) && continue
+  if [[ -f "$list_file" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" == "$base" ]] && {
+        already_encoded=$((already_encoded + 1))
+        continue 2
+      }
+    done < "$list_file"
   fi
 
-  # Skip if already encoded
-  if [[ -f "$list_file" ]] && grep -Fxq "$base" "$list_file"; then
-    echo "✅ Already encoded: $base"
+  codec_name=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nokey=1:noprint_wrappers=1 "$f" 2>/dev/null) || {
+    corrupted_files=$((corrupted_files + 1))
     continue
-  fi
+  }
+  [[ -z "$codec_name" ]] && continue
+  [[ "$codec_name" == "hevc" || "$codec_name" == "av1" ]] && continue
 
-  # Skip if already in HEVC or AV1
-  codec_name=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nokey=1:noprint_wrappers=1 "$f")
-  if [[ "$codec_name" == "hevc" || "$codec_name" == "av1" ]]; then
-    echo "⚠️  Already in $codec_name, skipping: $base"
-    echo "$base" >> "$list_file"
+  duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$f" 2>/dev/null) || {
+    corrupted_files=$((corrupted_files + 1))
     continue
-  fi
-
-  # Get video duration in seconds
-  duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$f")
+  }
   duration=${duration%.*}
-  if [[ -z "$duration" || "$duration" -le 0 ]]; then
-    echo "❌ Duration undetected or zero, skipping: $base"
-    echo "$base" >> "$list_file"
-    continue
-  fi
+  [[ -z "$duration" || "$duration" -le 0 ]] && continue
 
-  # Prepare temp output filenames
+  candidates+=("$f")
+
+done < <("${find_cmd[@]}")
+
+echo -ne "\r├── $all_videos video files found / ${#candidates[@]} will be encoded"
+
+echo ""
+
+if (( DRY_RUN == 1 )); then
+  echo -e "\n📝 Compatible files for encoding:"
+  for file in "${candidates[@]}"; do
+    size_bytes=$(stat -c%s "$file")
+    size_fmt=$(print_size "$size_bytes")
+    codec=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nokey=1:noprint_wrappers=1 "$file")
+    duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$file")
+    duration_fmt=$(printf "%.0f sec" "$duration")
+    echo "  📦 $(basename "$file") | $size_fmt | $codec | $duration_fmt"
+  done
+  echo -e "\n✅ ${#candidates[@]} file(s) listed."
+  exit 0
+fi
+
+# =====================
+# Main Processing Loop
+# =====================
+
+encoding_number=0
+
+for f in "${candidates[@]}"; do
+  dir=$(dirname "$f")
+  base=$(basename "$f")
+  list_file="$dir/encoded.list"
+  encoding_number=$((encoding_number + 1))
+  size_bytes=$(stat -c%s "$f")
+  duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$f")
+  duration_int=${duration%.*}
+  duration_view=$(printf '%02d:%02d:%02d' $((duration_int/3600)) $(( (duration_int%3600)/60 )) $((duration_int%60)))
+  duration=${duration%.*}
+  echo ""
+  msg="Encoding $encoding_number / ${#candidates[@]} : $base ($(print_size "$size_bytes") | $duration_view)"
+  print_boxed_message "$msg"
+
+
   tmp_test="$dir/.tmp_encode_test_${base}"
   ext="${base##*.}"
   ext_lower=$(echo "$ext" | tr 'A-Z' 'a-z')
@@ -202,27 +279,27 @@ while IFS= read -r f; do
   [[ "$ext_lower" == "avi" || "$ext_lower" == "mp4" ]] && output_ext="mkv"
   tmp_file="$dir/.tmp_encode_${base%.*}.$output_ext"
 
-  echo "🔎 Encoding test (2s): $base"
+  echo "🔎 Encoding test (${TEST_DURATION}s)"
   if ! build_ffmpeg_command "$f" "$tmp_test" "$duration" test < /dev/null &> /dev/null; then
-    echo "❌ Test encoding failed"
+    echo "├── ❌ Test encoding failed"
     rm -f "$tmp_test"
     continue
   fi
 
   test_size=$(stat -c%s "$tmp_test")
-  estimated_size=$(( test_size * duration / 2 ))
+  estimated_size=$(( test_size * duration / TEST_DURATION ))
+  echo "├── Estimated size: $(print_size "$estimated_size")"
   rm -f "$tmp_test"
 
-  # Skip if estimated output is > 70% of original size
   if (( estimated_size >= size_bytes * 7 / 10 )); then
-    echo "❌ Estimated size > 70% of original, skipping: $base"
+    echo "├── ❌ Estimated size > 70% of original, skipping"
     echo "$base" >> "$list_file"
     continue
   fi
 
   echo "▶️  Full encoding: $base"
   if ! build_ffmpeg_command "$f" "$tmp_file" "$duration" full < /dev/null; then
-    echo "❌ Full encoding failed: $base"
+    echo "├── ❌ Full encoding failed"
     rm -f "$tmp_file"
     continue
   fi
@@ -233,20 +310,21 @@ while IFS= read -r f; do
       new_file="${f%.*}.$output_ext"
       mv -f "$tmp_file" "$new_file"
       rm -f "$f"
-      echo "✅ Replaced with new file: $new_file"
+      echo "├── ✅ Replaced with new file: $new_file"
     else
       mv -f "$tmp_file" "$f"
-      echo "✅ Replaced original: $base"
+      echo "├── ✅ Replaced original"
     fi
 
     orig_size_fmt=$(print_size "$size_bytes")
     new_size_fmt=$(print_size "$new_size")
     reduc_percent=$(( (size_bytes - new_size)*100 / size_bytes ))
-    echo "✅ Size reduced: original = $orig_size_fmt | new = $new_size_fmt | reduction = ${reduc_percent}%"
+    echo "├── ✅ Size reduced: original = $orig_size_fmt | new = $new_size_fmt | reduction = ${reduc_percent}%"
   else
-    echo "⚠️  Encoded file is larger, keeping original: $base"
+    echo "├── ⚠️  Encoded file is larger, keeping original"
     rm -f "$tmp_file"
   fi
 
   echo "$base" >> "$list_file"
-done < <("${find_cmd[@]}")
+  echo "--------------------END------------------------"
+done
