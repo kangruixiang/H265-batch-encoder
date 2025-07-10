@@ -15,6 +15,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 - ✅ Automatically avoids reprocessing files listed in `encoded.list` or 'failed.list'
 - ✅ Converts output to **MKV** if input is AVI or (if needed) MP4 for compatibility
 - ✅ Keeps original file if re-encoded version is not smaller
+- ✅ Keeps original file if duration mismatch (in case of a bug)
 - ✅ Adds fast-start flag and hvc1 tags on mp4 and mov files
 - ✅ Can be graciously stopped after encoding when X hours have passed (so it can be used in a nightly cron)
 
