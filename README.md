@@ -41,7 +41,22 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 ## 📥 Usage
 
 ```bash
-./h265-nvidia-batch-encoder.sh [-R] [min=X] <folder>
+Usage:
+  ./script.sh [arguments] <folder>
+    List of arguments :
+    -R              : Encode recursively inside subfolders
+    min=X.YZ        : Ignore files smaller than X.YZ GB
+    test=N          : Use N seconds for the test encode (default: 5)
+    --dry-run       : Only show compatible files without encoding
+    --keep-original : Keep original files instead of replacing them
+    --allow-h265    : Allow files already encoded in H.265
+    --allow-av1     : Allow files already encoded in AV1
+    -backup /path   : Save original files to backup path (used only if not using --keep-original)
+    --clean         : Remove temporary encoding files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
+    --purge         : Remove encoded.list files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
+    -h              : Show this help message
+    --stop-after HH.5  : Stop after HH.5 hours of encoding (useful if in cron)
+
 ```
 ### How it will look
 
