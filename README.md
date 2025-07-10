@@ -8,7 +8,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 
 - ✅ Keeps all audio tracks and subtitles
 - ✅ Skips files already encoded in **HEVC** or **AV1**
-- ✅ Skips files for which re-encoding will only decrease size by <20%
+- ✅ Skips files for which re-encoding will only decrease size by <20% by taking 3 small samples
 - ✅ Skips files **smaller than a defined minimum size (in GB)** (accepts decimals with . or ,)
 - ✅ Skips files with **invalid duration** or that **fail test encoding**
 - ✅ Skips files with already low bitrate
