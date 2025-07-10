@@ -1,26 +1,29 @@
 #!/bin/bash
 
-# =======================
-# Video Encoding Script
-# =======================
-# Supported formats: .mkv .avi .mp4 .mov .wmv .flv
-# This script re-encodes video files using hardware-accelerated HEVC (H.265) compression,
-# optionally skipping already optimized files and ignoring small files.
-#
-# Usage:
-#   ./script.sh [-R] [min=X] [test=Y] [--dry-run] [--keep-original] [--allow-h265] [--allow-av1] [-backup /path] <folder>
-#     -R              : Encode recursively inside subfolders
-#     min=X.YZ        : Ignore files smaller than X.YZ GB
-#     test=N          : Use N seconds for the test encode (default: 5)
-#     --dry-run       : Only show compatible files without encoding
-#     --keep-original : Keep original files instead of replacing them
-#     --allow-h265    : Allow files already encoded in H.265
-#     --allow-av1     : Allow files already encoded in AV1
-#     -backup /path   : Save original files to backup path (used only if not using --keep-original)
-#     --clean         : Remove temporary encoding files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
-#     --purge         : Remove encoded.list files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
-#     -h              : Show this help message
-#     --stop-after HH.5  : Stop after HH.5 hours of encoding (useful if in cron)
+usage() {
+  echo "
+Supported formats: .mkv .avi .mp4 .mov .wmv .flv
+This script re-encodes video files using hardware-accelerated HEVC (H.265) compression,
+optionally skipping already optimized files and ignoring small files.
+
+Usage:
+  ./script.sh [-R] [min=X] [test=Y] [--dry-run] [--keep-original] [--allow-h265] [--allow-av1] [-backup /path] <folder>
+    -R              : Encode recursively inside subfolders
+    min=X.YZ        : Ignore files smaller than X.YZ GB
+    test=N          : Use N seconds for the test encode (default: 5)
+    --dry-run       : Only show compatible files without encoding
+    --keep-original : Keep original files instead of replacing them
+    --allow-h265    : Allow files already encoded in H.265
+    --allow-av1     : Allow files already encoded in AV1
+    -backup /path   : Save original files to backup path (used only if not using --keep-original)
+    --clean         : Remove temporary encoding files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
+    --purge         : Remove encoded.list files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
+    -h              : Show this help message
+    --stop-after HH.5  : Stop after HH.5 hours of encoding (useful if in cron)"
+  exit 0
+}
+
+set -e
 
 
 # ===========================
@@ -103,7 +106,6 @@ MIN_BYTE_PER_SEC=$((MIN_BITRATE * 1000 / 8))
 ###################
 # System settings
 ##################
-set -e
 offset_auto=0
 RECURSIVE=0
 raw_min=0
@@ -121,10 +123,7 @@ STOP_AFTER_HOURS=0
 # =====================
 # Function Definitions
 # =====================
-usage() {
-  grep '^#' "$0" | cut -c 4-
-  exit 0
-}
+
 
 print_size() {
   local bytes=$1
@@ -179,7 +178,7 @@ build_ffmpeg_command() {
   # Only needed for mp4 and mov to enhance compatibility with Apple products
   container_ext="${input_file##*.}"
   container_args=()
-  if [[ "$container_ext" =~ ^(mp4|mov)$ ]]; then
+  if [[ "$container_ext" =~ ^(mp4|mov|MP4|MOV)$ ]]; then
     container_args=(-tag:v hvc1 -movflags +faststart)
   fi
 
@@ -220,6 +219,8 @@ print_boxed_message_multiline() {
     done
     echo "$bottom"
 }
+
+clear
 
 echo "██   ██ ██████   ██████  ███████     ███████ ███    ██  ██████  ██████  ██████  ███████ ██████  
 ██   ██      ██ ██       ██          ██      ████   ██ ██      ██    ██ ██   ██ ██      ██   ██ 
@@ -574,9 +575,37 @@ if [ $? -ne 0 ]; then
     fi    
   else
     echo "├── ✅ Encoding succeeded"
-    echo "$output"
 fi
 
+# Compare durations
+echo "⏳  Duration validation"
+
+new_duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$tmp_file")
+new_duration_int=${duration%.*}
+ 
+  if [[ ! "$new_duration_int" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "├── ⚠️ Unable to read duration from one of the files, encoding rejected"
+    rm -f "$tmp_file"
+    echo "$base" >> "$failed_file"
+    continue
+  fi
+
+  duration_diff=$(( duration_int - new_duration_int ))
+    if (( duration_diff < 0 )); then
+      duration_diff=$(( -duration_diff ))
+    fi
+  max_diff=2
+
+if (( duration_diff > $max_diff )); then
+    echo "├── ❌ Duration mismatch (diff: ${duration_diff}s), encoded file rejected"
+    rm -f "$tmp_file"
+    echo "$base" >> "$failed_file"
+    continue
+  else
+    echo "├── ✅ Duration validated (diff: ${duration_diff}s)"
+  fi
+
+echo "🎥  Video file replacement"
 
   new_size=$(stat -c%s "$tmp_file")
   if (( new_size < size_bytes )); then
@@ -590,12 +619,12 @@ fi
         echo "├── ☁️  Backed up original to $BACKUP_DIR"
       fi
       mv -f "$tmp_file" "$f"
-      echo "├── ✅ Replaced original"
+      echo "├── Replaced original"
     fi
     orig_size_fmt=$(print_size "$size_bytes")
     new_size_fmt=$(print_size "$new_size")
     reduc_percent=$(( (size_bytes - new_size)*100 / size_bytes ))
-    echo "├── ✅ Size reduced: $orig_size_fmt → $new_size_fmt | −${reduc_percent}%"
+    echo "├── Size reduced: $orig_size_fmt → $new_size_fmt | −${reduc_percent}%"
   else
     echo "├── ⚠️  Encoded file is larger, skipping replacement"
     rm -f "$tmp_file"
