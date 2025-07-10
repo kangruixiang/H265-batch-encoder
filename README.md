@@ -103,7 +103,6 @@ Scanning...
 ▶️  Full encoding (00:46:27)
 frame=69686 fps=129 q=24.0 Lsize=  580334kB time=00:46:27.47 bitrate=1705.5kbits/s speed=5.15x    
 ├── ✅ Encoding succeeded
-frame=69686 fps=129 q=24.0 Lsize=  580334kB time=00:46:27.47 bitrate=1705.5kbits/s speed=5.15x    
 ├── ✅ Replaced original
 ├── ✅ Size reduced: 2.12 GB → 566.73 MB | −73%
 
