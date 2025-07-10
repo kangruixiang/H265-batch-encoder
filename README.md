@@ -46,25 +46,60 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 ### How it will look
 
 ```bash
+██   ██ ██████   ██████  ███████     ███████ ███    ██  ██████  ██████  ██████  ███████ ██████  
+██   ██      ██ ██       ██          ██      ████   ██ ██      ██    ██ ██   ██ ██      ██   ██ 
+███████  █████  ███████  ███████     █████   ██ ██  ██ ██      ██    ██ ██   ██ █████   ██████  
+██   ██ ██      ██    ██      ██     ██      ██  ██ ██ ██      ██    ██ ██   ██ ██      ██   ██ 
+██   ██ ███████  ██████  ███████     ███████ ██   ████  ██████  ██████  ██████  ███████ ██   ██
+┌────────────────────────────────────────────┐
+│  CURRENT ENCODING SETTINGS                 │
+│                                            │
+│  Hardware Acceleration:     true (cuda)    │
+│  Video Codec:               hevc_nvenc     │
+│  Audio Codec:               aac @ 256k     │
+│  Constant Quality (CQ):     30             │
+│  Encoding Preset:           p3             │
+│  Minimum bitrate:           2000kbps       │
+│  Test Clip Duration:        (3x) 5s        │
+│  Minimum Size Ratio:        0.8            │
+│                                            │
+│  ONE-TIME SETTINGS                         │
+│  Folder                     /LEGAL_VIDEOS/ │
+│  Recursive                  1              │
+│  Minimum Size               1,5 GB         │
+│  Keep original              0              │
+│  Stop after                 0h             │
+│  Allow H265                 0              │
+│  Allow AV1                  0              │
+│  Backup directory                          │
+│  Dry run                    0              │
+└────────────────────────────────────────────┘
 Scanning...
-├── 5 video files found / 5 will be encoded
+├── 15800 video files found / 198 will be encoded / 14 indicated as encoded / 0 indicated as failed
 
-┌──────────────────────────────────────────────────────────────────┐
-│  Encoding 1 / 5 : Totally Legal S01E01.mkv (1.39 GB | 00:34:27)  │
-└──────────────────────────────────────────────────────────────────┘
- Encoding test (5s)
-├── Estimated size: 368.12 MB
-▶️  Full encoding: Totally Legal S01E01.mkv
-frame=49613 fps= 76 q=23.0 Lsize=  589664kB time=00:34:27.39 bitrate=2336.5kbits/s speed=3.17x     
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Task 1 / 198 : Totally Legal - S01E01 - The Beginning.mkv (2.12 GB | 00:46:27)              │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+ Encoding samples (3x 5s)
+|------|----|----| @ 696s
+|----|------|----| @ 1393s
+|----|----|------| @ 2090s
+├── Estimated size (median of 3 samples): 472.14 MB
+▶️  Full encoding (00:46:27)
+frame=69686 fps=129 q=24.0 Lsize=  580334kB time=00:46:27.47 bitrate=1705.5kbits/s speed=5.15x    
+├── ✅ Encoding succeeded
+frame=69686 fps=129 q=24.0 Lsize=  580334kB time=00:46:27.47 bitrate=1705.5kbits/s speed=5.15x    
 ├── ✅ Replaced original
-├── ✅ Size reduced: original = 1.39 GB | new = 575.84 MB | reduction = 59%
---------------------END------------------------
+├── ✅ Size reduced: 2.12 GB → 566.73 MB | −73%
 
-┌─────────────────────────────────────────────────────────────────┐
-│  Encoding 2 / 5 : Totally Legal S01E02.mkv (1.82 GB | 00:43:29) │
-└─────────────────────────────────────────────────────────────────┘
- Encoding test (5s)
-├── Estimated size: 468.70 MB
-▶️  Full encoding:Totally Legal S01E02.mkv
-...
+┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Task 2 / 198 : Totally Legal - S01E02 - I Cant Belive It Is Free.mkv (1.56 GB | 01:21:15)        │
+└───────────────────────────────────────────────────────────────────────────────────────────────────┘
+ Encoding samples (3x 5s)
+|------|----|----| @ 1218s
+|----|------|----| @ 2437s
+|----|----|------| @ 3656s
+├── Estimated size (median of 3 samples): 802.86 MB
+▶️  Full encoding (01:21:15)
+frame=43556 fps=131 q=25.0 size=  461568kB time=00:30:16.87 bitrate=2081.1kbits/s speed=5.47x 
 ```
