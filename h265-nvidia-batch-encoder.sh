@@ -546,64 +546,68 @@ fi
 
 echo "▶️  Full encoding ($duration_view)"
   
-  output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" full < /dev/null 2>&1 | tee >(cat >&2))
-if [ $? -ne 0 ]; then
-   
-    if echo "$output" | grep -qE 'Subtitle codec|Could not write header'; then
-      echo "├── ⚠️ Subtitle codec error detected, retrying without subtitles..."
-      output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" no_sub < /dev/null 2>&1 | tee >(cat >&2))
-      if [ $? -eq 0 ]; then
-        echo "├── ✅ Encoding succeeded without subtitles"
-      else
-        echo "├── ❌ Encoding failed even without subtitles"
-        echo "$output"
-        rm -f "$tmp_file"
-        continue
-      fi
-    elif echo "$output" | grep -qE 'Error'; then
-       echo "├── ❌ Full encoding failed"
-      echo "$output"
-      rm -f "$tmp_file"
-      echo "$base" >> "$failed_file"
-      continue
-    else
-      echo "├── ❌ Full encoding failed"
-      echo "$output"
-      rm -f "$tmp_file"
-      echo "$base" >> "$failed_file"
-      continue
-    fi    
+output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" < /dev/null 2>&1 | tee >(cat >&2))
+ffmpeg_status=$?
+
+# Case 1: Subtitle codec issue — retry without subtitles
+if echo "$output" | grep -qE 'Subtitle codec|Could not write header'; then
+  echo "├── ⚠️ Subtitle codec error detected, retrying without subtitles..."
+  output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" no_sub < /dev/null 2>&1 | tee >(cat >&2))
+  if [ $? -eq 0 ]; then
+    echo "├── ✅ Encoding succeeded without subtitles"
   else
-    echo "├── ✅ Encoding succeeded"
+    echo "├── ❌ Encoding failed even without subtitles"
+    echo "$output"
+    rm -f "$tmp_file"
+    echo "$base" >> "$failed_file"
+    continue
+  fi
+
+# Case 2: General failure or critical errors
+elif [[ $ffmpeg_status -ne 0 ]] || echo "$output" | grep -qE 'Could not write header|Error initializing output stream|invalid encoder|Invalid argument|Conversion failed|non-monotonically increasing'; then
+  echo "├── ❌ Full encoding failed"
+  echo "$output"
+  rm -f "$tmp_file"
+  echo "$base" >> "$failed_file"
+  continue
+
+# Case 3: Success (no error detected and ffmpeg exited cleanly)
+else
+  echo "├── ✅ Encoding succeeded"
 fi
+
 
 # Compare durations
 echo "⏳  Duration validation"
 
 new_duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$tmp_file")
-new_duration_int=${duration%.*}
- 
-  if [[ ! "$new_duration_int" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-    echo "├── ⚠️ Unable to read duration from one of the files, encoding rejected"
-    rm -f "$tmp_file"
-    echo "$base" >> "$failed_file"
-    continue
-  fi
 
-  duration_diff=$(( duration_int - new_duration_int ))
-    if (( duration_diff < 0 )); then
-      duration_diff=$(( -duration_diff ))
-    fi
-  max_diff=2
+# Vérifie si ffprobe a retourné une valeur numérique
+if [[ ! "$new_duration" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "├── ⚠️ Unable to read duration from encoded file, encoding rejected"
+  rm -f "$tmp_file"
+  echo "$base" >> "$failed_file"
+  continue
+fi
 
-if (( duration_diff > $max_diff )); then
-    echo "├── ❌ Duration mismatch (diff: ${duration_diff}s), encoded file rejected"
-    rm -f "$tmp_file"
-    echo "$base" >> "$failed_file"
-    continue
-  else
-    echo "├── ✅ Duration validated (diff: ${duration_diff}s)"
-  fi
+# Convertir les durées en entier (secondes)
+new_duration_int=${new_duration%.*}
+duration_diff=$(( duration_int - new_duration_int ))
+if (( duration_diff < 0 )); then
+  duration_diff=$(( -duration_diff ))
+fi
+
+max_diff=2
+
+if (( duration_diff > max_diff )); then
+  echo "├── ❌ Duration mismatch (diff: ${duration_diff}s), encoded file rejected"
+  rm -f "$tmp_file"
+  echo "$base" >> "$failed_file"
+  continue
+else
+  echo "├── ✅ Duration validated (diff: ${duration_diff}s)"
+fi
+
 
 echo "🎥  Video file replacement"
 
