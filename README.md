@@ -17,6 +17,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 - ✅ Keeps original file if re-encoded version is not smaller
 - ✅ Keeps original file if duration mismatch (in case of a bug)
 - ✅ Adds fast-start flag and hvc1 tags on mp4 and mov files
+- ✅ Different CQ depending on video definition (SD/HD) (thx to @BrendanoElTaco for the request)
 - ✅ Can be graciously stopped after encoding when X hours have passed (so it can be used in a nightly cron)
 
 
@@ -67,54 +68,59 @@ Usage:
 ███████  █████  ███████  ███████     █████   ██ ██  ██ ██      ██    ██ ██   ██ █████   ██████  
 ██   ██ ██      ██    ██      ██     ██      ██  ██ ██ ██      ██    ██ ██   ██ ██      ██   ██ 
 ██   ██ ███████  ██████  ███████     ███████ ██   ████  ██████  ██████  ██████  ███████ ██   ██
-┌────────────────────────────────────────────┐
-│  CURRENT ENCODING SETTINGS                 │
-│                                            │
-│  Hardware Acceleration:     true (cuda)    │
-│  Video Codec:               hevc_nvenc     │
-│  Audio Codec:               aac @ 256k     │
-│  Constant Quality (CQ):     30             │
-│  Encoding Preset:           p3             │
-│  Minimum bitrate:           2000kbps       │
-│  Test Clip Duration:        (3x) 5s        │
-│  Minimum Size Ratio:        0.8            │
-│                                            │
-│  ONE-TIME SETTINGS                         │
-│  Folder                     /LEGAL_VIDEOS/ │
-│  Recursive                  1              │
-│  Minimum Size               1,5 GB         │
-│  Keep original              0              │
-│  Stop after                 0h             │
-│  Allow H265                 0              │
-│  Allow AV1                  0              │
-│  Backup directory                          │
-│  Dry run                    0              │
-└────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│  CURRENT ENCODING SETTINGS                                 │
+│                                                            │
+│  Hardware Acceleration:     true (cuda)                    │
+│  Video Codec:               hevc_nvenc                     │
+│  Audio Codec:               aac @ 256k                     │
+│  Constant Quality HD:       30                             │
+│  Constant Quality SD:       26                             │
+│  Constant Quality Default:  30                             │
+│  Encoding Preset:           p3                             │
+│  Minimum bitrate:           2000kbps                       │
+│  Test Clip Duration:        (3x) 5s                        │
+│  Minimum Size Ratio:        0.8                            │
+│                                                            │
+│  ONE-TIME SETTINGS                                         │
+│  Folder                     /FAMILY/TRAVELS/  │
+│  Recursive                  1                              │
+│  Minimum Size               0 GB                           │
+│  Keep original              0                              │
+│  Stop after                 0h                             │
+│  Allow H265                 0                              │
+│  Allow AV1                  0                              │
+│  Backup directory                                          │
+│  Dry run                    0                              │
+└────────────────────────────────────────────────────────────┘
 Scanning...
-├── 15800 video files found / 198 will be encoded / 14 indicated as encoded / 0 indicated as failed
+├── 112 video files found / 48 will be encoded / 0 indicated as encoded / 0 indicated as failed
 
-┌──────────────────────────────────────────────────────────────────────────────────────────────┐
-│  Task 1 / 198 : Totally Legal - S01E01 - The Beginning.mkv (2.12 GB | 00:46:27)              │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│  Task 1 / 48 : 2010-10-18-22-LES-ISSAMBRES.mp4 (637.45 MB | 00:22:51 | 720x574 | CQ=26)  │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
  Encoding samples (3x 5s)
-|------|----|----| @ 696s
-|----|------|----| @ 1393s
-|----|----|------| @ 2090s
-├── Estimated size (median of 3 samples): 472.14 MB
-▶️  Full encoding (00:46:27)
-frame=69686 fps=129 q=24.0 Lsize=  580334kB time=00:46:27.47 bitrate=1705.5kbits/s speed=5.15x    
+|------|----|----| @ 342s
+|----|------|----| @ 685s
+|----|----|------| @ 1028s
+├── Estimated size (median of 3 samples): 384.68 MB
+▶️  Full encoding (00:22:51)
+frame=34280 fps=308 q=21.0 Lsize=  341027kB time=00:22:51.50 bitrate=2037.0kbits/s speed=12.3x    
 ├── ✅ Encoding succeeded
-├── ✅ Replaced original
-├── ✅ Size reduced: 2.12 GB → 566.73 MB | −73%
+⏳  Duration validation
+├── ✅ Duration validated (diff: 0s)
+  Video file replacement
+├── Replaced original
+├── Size reduced: 637.45 MB → 333.03 MB | −47%
 
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│  Task 2 / 198 : Totally Legal - S01E02 - I Cant Belive It Is Free.mkv (1.56 GB | 01:21:15)        │
-└───────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  Task 2 / 48 : 2000-CASSAGNE-2002-ESPARSAC-2003-LE-PUY-2003-PELUSSIN-CH1.mp4 (1.55 GB | 00:41:58 | 720x574 | CQ=26)  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  Encoding samples (3x 5s)
-|------|----|----| @ 1218s
-|----|------|----| @ 2437s
-|----|----|------| @ 3656s
-├── Estimated size (median of 3 samples): 802.86 MB
-▶️  Full encoding (01:21:15)
-frame=43556 fps=131 q=25.0 size=  461568kB time=00:30:16.87 bitrate=2081.1kbits/s speed=5.47x 
+|------|----|----| @ 629s
+|----|------|----| @ 1259s
+|----|----|------| @ 1888s
+├── Estimated size (median of 3 samples): 738.27 MB
+▶️  Full encoding (00:41:58)
+frame= 4872 fps=140 q=32.0 size=   52736kB time=00:03:15.17 bitrate=2213.4kbits/s speed=5.59x 
 ```
