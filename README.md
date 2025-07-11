@@ -2,7 +2,7 @@
 
 ## 📦 Description
 
-This Bash script scans a folder (optionally recursively) for video files (`*.mkv`, `*.avi`, `*.mp4`, `*.mov`, `*.wmv`, `*.flv`) that are **not** already encoded in HEVC (H.265) or AV1 format. It performs a **5-second test encoding** to estimate final file size. If the estimated encoded file is at least **30% smaller** than the original, it performs a full re-encoding using **GPU acceleration (CUDA)** via `ffmpeg`, replacing the original file if the new one is smaller.
+This Bash script scans a folder (optionally recursively) for video files (`*.mkv`, `*.avi`, `*.mp4`, `*.mov`, `*.wmv`, `*.flv`) that are **not** already encoded in HEVC (H.265) or AV1 format. It performs a **15-second test encoding** to estimate final file size. If the estimated encoded file is at least **30% smaller** than the original, it performs a full re-encoding using **GPU acceleration (CUDA)** via `ffmpeg`, replacing the original file if the new one is smaller.
 
 ## 🎯 Features
 
@@ -32,7 +32,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
    - Skip if already in HEVC or AV1
    - Skip if file size is below the `min=X` threshold
    - Skip if already listed in `encoded.list`
-   - Perform a 10s GPU-accelerated test encode
+   - Perform a 15s GPU-accelerated test encode
    - Estimate full file size based on result
    - If estimated size is ≥80% of original, skip encoding
    - Otherwise, encode full file using `ffmpeg`
