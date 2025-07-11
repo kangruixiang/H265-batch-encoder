@@ -63,19 +63,31 @@ AUDIO_BITRATE="256k"
 # Higher = lower quality, smaller file
 # - NVENC recommended range: 19–28
 # - libx265 recommended range: 18–28
+# Adaptive CQ settings based on video resolution
+CQ_HD="30"           # For HD videos (resolution >= CQ_WIDTH_THRESHOLD)
+CQ_SD="26"           # For SD videos (resolution < CQ_WIDTH_THRESHOLD)
+CQ_WIDTH_THRESHOLD="1920"  # WIDTH threshold in pixels to determine HD vs SD
+#
 CQ="30"
+# Width cheatsheet
+# Height	Width	CQ range
+# 480p	     720	26–28
+# 720p   	1280	28–30
+# 1080p	    1920	30–32
+# 2K (DCI)	2048	30–32
+# 4K (UHD)	3840	32–34
 
 # Encoding preset — affects speed and compression efficiency
 # ⚠️ Available values depend on the selected VIDEO_CODEC
 
 # For hevc_nvenc (NVIDIA):
-#   "p1" = fastest, lower quality
+#   "p1" = slowest, best quality
 #   "p2"
 #   "p3" = balanced (default)
 #   "p4"
 #   "p5"
 #   "p6"
-#   "p7" = slowest, best quality
+#   "p7" = fastest, lower quality
 
 # For libx265 (CPU encoder):
 #   "ultrafast", "superfast", "veryfast", "faster", "fast",
@@ -154,6 +166,7 @@ build_ffmpeg_command() {
   local duration="$3"
   local mode="$4"
   local offset="${5:-0}"  # offset en secondes, par défaut 0
+  local cq_value="${6:-$CQ}" # Dynamic CQ, fallback on global $CQ if undefined
   local ffmpeg_opts=()
   local timeout_limit=0
   local stats_opts=()
@@ -186,7 +199,7 @@ build_ffmpeg_command() {
     ffmpeg -y "${ffmpeg_opts[@]}" \
     -i "$input_file" \
     -map 0:v -map 0:a? -map 0:s? -hide_banner -loglevel error "${stats_opts[@]}" \
-    -c:v "$VIDEO_CODEC" -preset "$ENCODE_PRESET" -rc vbr -cq "$CQ" \
+    -c:v "$VIDEO_CODEC" -preset "$ENCODE_PRESET" -rc vbr -cq "$cq_value" \
     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
     -c:s copy \
     "${container_args[@]}" \
@@ -322,7 +335,9 @@ print_config() {
 \e[1;33mHardware Acceleration:\e[0m     ${USE_HWACCEL} (${HWACCEL_TYPE})
 \e[1;33mVideo Codec:\e[0m               ${VIDEO_CODEC}
 \e[1;33mAudio Codec:\e[0m               ${AUDIO_CODEC} @ ${AUDIO_BITRATE}
-\e[1;33mConstant Quality (CQ):\e[0m     ${CQ}
+\e[1;33mConstant Quality HD:\e[0m       ${CQ_HD}
+\e[1;33mConstant Quality SD:\e[0m       ${CQ_SD}
+\e[1;33mConstant Quality Default:\e[0m  ${CQ}
 \e[1;33mEncoding Preset:\e[0m           ${ENCODE_PRESET}
 \e[1;33mMinimum bitrate:\e[0m           ${MIN_BITRATE}kbps
 \e[1;33mTest Clip Duration:\e[0m        (3x) ${TEST_DURATION}s
@@ -368,29 +383,52 @@ while IFS= read -r f; do
    all_videos=$((all_videos + 1))
   echo -ne "\r├── $all_videos video files found / ${#candidates[@]} will be encoded / $already_encoded indicated as encoded / $already_failed indicated as failed"
 
+  #detect files too small
   size_bytes=$(stat -c%s "$f" 2>/dev/null) || continue
   (( MIN_SIZE_BYTES > 0 && size_bytes < MIN_SIZE_BYTES )) && continue
-
+  
+  #detect already encoded
   if [[ -f "$list_file" ]] && grep -Fxq "$base" "$list_file"; then
   already_encoded=$((already_encoded + 1))
   continue
   fi
-
+  
+  #detect already failed
   if [[ -f "$failed_file" ]] && grep -Fxq "$base" "$failed_file"; then
     already_failed=$((already_failed + 1))
     continue
   fi
 
-
+  #detect codec
   codec_name=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=codec_name -of default=nokey=1:noprint_wrappers=1 "$f" 2>/dev/null) || continue
   [[ "$codec_name" == "hevc" && $ALLOW_H265 -eq 0 ]] && continue
   [[ "$codec_name" == "av1" && $ALLOW_AV1 -eq 0 ]] && continue
 
+  #detect duration
   duration=$(ffprobe -v quiet -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$f")
   duration_int=${duration%.*}
   [[ -z "$duration_int" || "$duration_int" -le 0 ]] && continue
+  
+  # Try to get the video width using ffprobe
+  width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$f" 2>/dev/null)
+
+  # Fallback if ffprobe fails or returns an invalid width
+  if [[ $? -ne 0 || -z "$width" || "$width" -le 0 ]]; then
+    echo "Warning: Unable to determine width for '$f', using fallback CQ=$CQ"
+    file_cq="$CQ"
+  else
+    # Assign CQ based on width threshold
+    if (( width >= CQ_WIDTH_THRESHOLD )); then
+      file_cq="$CQ_HD"
+    else
+      file_cq="$CQ_SD"
+    fi
+  fi
+
 
   candidates+=("$f")
+  candidates_cq+=("$file_cq")
+
 
 
   
@@ -424,6 +462,7 @@ start_time=$(date +%s)
 stop_after_seconds=$(awk "BEGIN {printf \"%.0f\", $STOP_AFTER_HOURS * 3600}")
 
 for f in "${candidates[@]}"; do
+  CQ="${candidates_cq[$i]}"
   encoding_number=$((encoding_number + 1))
   base=$(basename "$f")
   dir=$(dirname "$f")
@@ -433,6 +472,8 @@ for f in "${candidates[@]}"; do
   duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$f")
   duration_int=${duration%.*}
   duration_view=$(printf '%02d:%02d:%02d' $((duration_int/3600)) $(( (duration_int%3600)/60 )) $((duration_int%60)))
+  resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$f")
+
   
 
   if (( STOP_AFTER_HOURS > 0 )); then
@@ -447,7 +488,7 @@ for f in "${candidates[@]}"; do
 
 
   echo ""
-  print_boxed_message "Task $encoding_number / ${#candidates[@]} : $(basename "$f") ($(print_size "$size_bytes") | $duration_view)"
+  print_boxed_message "Task $encoding_number / ${#candidates[@]} : $(basename "$f") ($(print_size "$size_bytes") | $duration_view | $resolution | CQ=$CQ)"
 
   ext="${base##*.}"
   ext_lower=$(echo "$ext" | tr 'A-Z' 'a-z')
@@ -503,7 +544,7 @@ for offset_auto in "${offsets[@]}"; do
   # Affichage graphique ASCII de la timeline avec curseur
   print_timeline $test_number
 
-  if ! build_ffmpeg_command "$f" "$tmp_test" "$duration" test "$offset_auto" < /dev/null ; then
+  if ! build_ffmpeg_command "$f" "$tmp_test" "$duration" test "$offset_auto" "$cq" < /dev/null ; then
     echo "├── ❌ Test encoding failed at offset ${offset_auto}s"
     rm -f "$tmp_test"
     success=false
@@ -546,13 +587,13 @@ fi
 
 echo "▶️  Full encoding ($duration_view)"
   
-output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" < /dev/null 2>&1 | tee >(cat >&2))
+output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" "$cq" < /dev/null 2>&1 | tee >(cat >&2))
 ffmpeg_status=$?
 
 # Case 1: Subtitle codec issue — retry without subtitles
 if echo "$output" | grep -qE 'Subtitle codec|Could not write header'; then
   echo "├── ⚠️ Subtitle codec error detected, retrying without subtitles..."
-  output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" no_sub < /dev/null 2>&1 | tee >(cat >&2))
+  output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" "$cq" no_sub < /dev/null 2>&1 | tee >(cat >&2))
   if [ $? -eq 0 ]; then
     echo "├── ✅ Encoding succeeded without subtitles"
   else
