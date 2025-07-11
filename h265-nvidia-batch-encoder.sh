@@ -69,13 +69,13 @@ CQ="30"
 # ⚠️ Available values depend on the selected VIDEO_CODEC
 
 # For hevc_nvenc (NVIDIA):
-#   "p1" = slowest, best quality
+#   "p1" = fastest, lower quality
 #   "p2"
 #   "p3" = balanced (default)
 #   "p4"
 #   "p5"
 #   "p6"
-#   "p7" = fastest, lower quality
+#   "p7" = slowest, best quality
 
 # For libx265 (CPU encoder):
 #   "ultrafast", "superfast", "veryfast", "faster", "fast",
