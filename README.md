@@ -49,6 +49,7 @@ Usage:
     List of arguments :
     -R              : Encode recursively inside subfolders
     min=X.YZ        : Ignore files smaller than X.YZ GB
+    --regex="PATTERN"        Only include files matching the given regex pattern (e.g., --regex="\.avi$").
     test=N          : Use N seconds for the test encode (default: 5)
     --dry-run       : Only show compatible files without encoding
     --keep-original : Keep original files instead of replacing them
