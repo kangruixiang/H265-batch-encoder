@@ -19,6 +19,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 - ✅ Adds fast-start flag and hvc1 tags on mp4 and mov files
 - ✅ Different CQ depending on video definition (SD/HD) (thx to @BrendanoElTaco for the request)
 - ✅ Can be graciously stopped after encoding when X hours have passed (so it can be used in a nightly cron)
+- ✅ Allows REGEX filters
 
 
 ## ⚙️ Requirements
