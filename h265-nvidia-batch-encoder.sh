@@ -10,6 +10,7 @@ Usage:
   ./script.sh [-R] [min=X] [test=Y] [--dry-run] [--keep-original] [--allow-h265] [--allow-av1] [-backup /path] <folder>
     -R              : Encode recursively inside subfolders
     min=X.YZ        : Ignore files smaller than X.YZ GB
+    --regex="PATTERN"        Only include files matching the given regex pattern (e.g., --regex="\.avi$").
     test=N          : Use N seconds for the test encode (default: 5)
     --dry-run       : Only show compatible files without encoding
     --keep-original : Keep original files instead of replacing them
@@ -131,6 +132,8 @@ BACKUP_DIR=""
 CLEAN_ONLY=0
 PURGE_ONLY=0
 STOP_AFTER_HOURS=0
+REGEX_FILTER=""
+
 
 # =====================
 # Function Definitions
@@ -268,6 +271,7 @@ while [[ $# -gt 0 ]]; do
     --clean) CLEAN_ONLY=1 ; shift ;;
     --purge) PURGE_ONLY=1 ; shift ;;
 	--stop-after) STOP_AFTER_HOURS=$(echo "$2" | sed 's/,/./' | awk '{printf "%.0f", $1}'); shift 2 ;;
+    --regex=*) REGEX_FILTER="${1#--regex=}" ; shift ;;
     -h) usage ;;
     *) [[ -z "$FOLDER" ]] && FOLDER="$1" || usage; shift ;;
   esac
@@ -332,20 +336,21 @@ print_config() {
   print_boxed_message_multiline <<EOF
 \e[1;1mCURRENT ENCODING SETTINGS\e[0m
 
-\e[1;33mHardware Acceleration:\e[0m     ${USE_HWACCEL} (${HWACCEL_TYPE})
-\e[1;33mVideo Codec:\e[0m               ${VIDEO_CODEC}
-\e[1;33mAudio Codec:\e[0m               ${AUDIO_CODEC} @ ${AUDIO_BITRATE}
-\e[1;33mConstant Quality HD:\e[0m       ${CQ_HD}
-\e[1;33mConstant Quality SD:\e[0m       ${CQ_SD}
-\e[1;33mConstant Quality Default:\e[0m  ${CQ}
-\e[1;33mEncoding Preset:\e[0m           ${ENCODE_PRESET}
-\e[1;33mMinimum bitrate:\e[0m           ${MIN_BITRATE}kbps
-\e[1;33mTest Clip Duration:\e[0m        (3x) ${TEST_DURATION}s
-\e[1;33mMinimum Size Ratio:\e[0m        ${MIN_SIZE_RATIO}
+\e[1;33mHardware Acceleration\e[0m     ${USE_HWACCEL} (${HWACCEL_TYPE})
+\e[1;33mVideo Codec\e[0m               ${VIDEO_CODEC}
+\e[1;33mAudio Codec\e[0m               ${AUDIO_CODEC} @ ${AUDIO_BITRATE}
+\e[1;33mConstant Quality HD\e[0m       ${CQ_HD}
+\e[1;33mConstant Quality SD\e[0m       ${CQ_SD}
+\e[1;33mConstant Quality Default\e[0m  ${CQ}
+\e[1;33mEncoding Preset\e[0m           ${ENCODE_PRESET}
+\e[1;33mMinimum bitrate\e[0m           ${MIN_BITRATE}kbps
+\e[1;33mTest Clip Duration\e[0m        (3x) ${TEST_DURATION}s
+\e[1;33mMinimum Size Ratio\e[0m        ${MIN_SIZE_RATIO}
 \e[1;33m\e[0m
 \e[1;33mONE-TIME SETTINGS\e[0m  
 \e[1;33mFolder\e[0m                     ${FOLDER}
 \e[1;33mRecursive\e[0m                  ${RECURSIVE}
+\e[1;33mREGEX Filter\e[0m                  ${REGEX_FILTER}
 \e[1;33mMinimum Size\e[0m               ${raw_min} GB
 \e[1;33mKeep original\e[0m              ${KEEP_ORIGINAL}
 \e[1;33mStop after\e[0m                 ${STOP_AFTER_HOURS}h
@@ -382,6 +387,11 @@ while IFS= read -r f; do
 
    all_videos=$((all_videos + 1))
   echo -ne "\r├── $all_videos video files found / ${#candidates[@]} will be encoded / $already_encoded indicated as encoded / $already_failed indicated as failed"
+
+  # Apply regex filter if specified
+  if [[ -n "$REGEX_FILTER" && ! "$f" =~ $REGEX_FILTER ]]; then
+    continue
+  fi
 
   #detect files too small
   size_bytes=$(stat -c%s "$f" 2>/dev/null) || continue
