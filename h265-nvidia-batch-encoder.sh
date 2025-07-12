@@ -66,7 +66,7 @@ AUDIO_BITRATE="256k"
 # Adaptive CQ settings based on video resolution
 CQ_HD="30"           # For HD videos (resolution >= CQ_WIDTH_THRESHOLD)
 CQ_SD="26"           # For SD videos (resolution < CQ_WIDTH_THRESHOLD)
-CQ_WIDTH_THRESHOLD="1920"  # WIDTH threshold in pixels to determine HD vs SD
+CQ_WIDTH_THRESHOLD=1920  # WIDTH threshold in pixels to determine HD vs SD
 #
 CQ="30"
 # Width cheatsheet
@@ -409,25 +409,7 @@ while IFS= read -r f; do
   duration_int=${duration%.*}
   [[ -z "$duration_int" || "$duration_int" -le 0 ]] && continue
   
-  # Try to get the video width using ffprobe
-  width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$f" 2>/dev/null)
-
-  # Fallback if ffprobe fails or returns an invalid width
-  if [[ $? -ne 0 || -z "$width" || "$width" -le 0 ]]; then
-    echo "Warning: Unable to determine width for '$f', using fallback CQ=$CQ"
-    file_cq="$CQ"
-  else
-    # Assign CQ based on width threshold
-    if (( width >= CQ_WIDTH_THRESHOLD )); then
-      file_cq="$CQ_HD"
-    else
-      file_cq="$CQ_SD"
-    fi
-  fi
-
-
   candidates+=("$f")
-  candidates_cq+=("$file_cq")
 
 
 
@@ -462,7 +444,6 @@ start_time=$(date +%s)
 stop_after_seconds=$(awk "BEGIN {printf \"%.0f\", $STOP_AFTER_HOURS * 3600}")
 
 for f in "${candidates[@]}"; do
-  CQ="${candidates_cq[$i]}"
   encoding_number=$((encoding_number + 1))
   base=$(basename "$f")
   dir=$(dirname "$f")
@@ -472,8 +453,23 @@ for f in "${candidates[@]}"; do
   duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$f")
   duration_int=${duration%.*}
   duration_view=$(printf '%02d:%02d:%02d' $((duration_int/3600)) $(( (duration_int%3600)/60 )) $((duration_int%60)))
-  resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$f")
+  height=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$f" 2>/dev/null)
+  
+  # Try to get the video width using ffprobe
+  width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$f" 2>/dev/null)
 
+  # Fallback if ffprobe fails or returns an invalid width
+  if [[ $? -ne 0 || -z "$width" || "$width" -le 0 ]]; then
+    echo "Warning: Unable to determine width for '$f', using fallback CQ=$CQ"
+    file_CQ="$CQ"
+  else
+    # Assign CQ based on width threshold
+    if (( width >= $CQ_WIDTH_THRESHOLD )); then
+      file_CQ="$CQ_HD"
+    else
+      file_CQ="$CQ_SD"
+    fi
+  fi
   
 
   if (( STOP_AFTER_HOURS > 0 )); then
@@ -488,7 +484,7 @@ for f in "${candidates[@]}"; do
 
 
   echo ""
-  print_boxed_message "Task $encoding_number / ${#candidates[@]} : $(basename "$f") ($(print_size "$size_bytes") | $duration_view | $resolution | CQ=$CQ)"
+  print_boxed_message "Task $encoding_number / ${#candidates[@]} : $(basename "$f") ($(print_size "$size_bytes") | $duration_view | "$width"x"$height" | CQ=$file_CQ)"
 
   ext="${base##*.}"
   ext_lower=$(echo "$ext" | tr 'A-Z' 'a-z')
@@ -544,7 +540,7 @@ for offset_auto in "${offsets[@]}"; do
   # Affichage graphique ASCII de la timeline avec curseur
   print_timeline $test_number
 
-  if ! build_ffmpeg_command "$f" "$tmp_test" "$duration" test "$offset_auto" "$cq" < /dev/null ; then
+  if ! build_ffmpeg_command "$f" "$tmp_test" "$duration" test "$offset_auto" "$file_CQ" < /dev/null ; then
     echo "├── ❌ Test encoding failed at offset ${offset_auto}s"
     rm -f "$tmp_test"
     success=false
@@ -587,7 +583,7 @@ fi
 
 echo "▶️  Full encoding ($duration_view)"
   
-output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" "$cq" < /dev/null 2>&1 | tee >(cat >&2))
+output=$(build_ffmpeg_command "$f" "$tmp_file" "$duration" "$file_CQ" < /dev/null 2>&1 | tee >(cat >&2))
 ffmpeg_status=$?
 
 # Case 1: Subtitle codec issue — retry without subtitles
