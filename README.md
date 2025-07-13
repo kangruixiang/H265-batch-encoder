@@ -30,16 +30,18 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
 
 ## 🧪 How it works
 
-1. For each eligible video file:
-   - Skip if already in HEVC or AV1
-   - Skip if file size is below the `min=X` threshold
-   - Skip if already listed in `encoded.list`
-   - Perform a 15s GPU-accelerated test encode
-   - Estimate full file size based on result
-   - If estimated size is ≥80% of original, skip encoding
-   - Otherwise, encode full file using `ffmpeg`
-   - If the encoded file is smaller, replace the original
-2. Results are logged in a file named `encoded.list` in each directory.
+1. When collecting eligible files
+   - Skips if already in HEVC or AV1
+   - Skips if file size is below the `min=X` threshold
+   - Skips if already listed in `encoded.list` or `failed.list`
+2. For each eligible video files
+   - Skips if global bitrate already under threshold
+   - Performs a 15s GPU-accelerated test encode (3 samples of 5s at 1/4, 1/2, 3/4 of the duration)
+   - Estimates full file size based on result
+   - If estimated size is ≥80% of original, skips encoding
+   - Otherwise, encodes full file using `ffmpeg`
+   - If the encoded file is smaller, replaces the original
+3. If encoded are logged in a file named `encoded.list` in each directory, if failed, added in a `failed.list` file
 
 ## 📥 Usage
 
