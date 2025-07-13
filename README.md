@@ -40,7 +40,7 @@ This Bash script scans a folder (optionally recursively) for video files (`*.mkv
    - Estimates full file size based on result
    - If estimated size is ≥80% of original, skips encoding
    - Otherwise, encodes full file using `ffmpeg`
-   - If the encoded file is smaller, replaces the original
+   - If the encoded file is smaller, and duration of new file matches the original, replaces the original
 3. If encoded are logged in a file named `encoded.list` in each directory, if failed, added in a `failed.list` file
 
 ## 📥 Usage
