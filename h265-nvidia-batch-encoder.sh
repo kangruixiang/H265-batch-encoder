@@ -24,7 +24,6 @@ Usage:
   exit 0
 }
 
-set -e
 
 
 # ===========================
@@ -67,7 +66,7 @@ AUDIO_BITRATE="256k"
 # Adaptive CQ settings based on video resolution
 CQ_HD="30"           # For HD videos (resolution >= CQ_WIDTH_THRESHOLD)
 CQ_SD="26"           # For SD videos (resolution < CQ_WIDTH_THRESHOLD)
-CQ_WIDTH_THRESHOLD=1920  # WIDTH threshold in pixels to determine HD vs SD
+CQ_WIDTH_THRESHOLD=1900  # WIDTH threshold in pixels to determine HD vs SD
 #
 CQ="30"
 # Width cheatsheet
@@ -112,7 +111,7 @@ TEST_DURATION=5
 MIN_SIZE_RATIO=0.8
 
 #Skip files below this bitrate (in kbps)
-MIN_BITRATE=2000
+MIN_BITRATE=2500
 MIN_BYTE_PER_SEC=$((MIN_BITRATE * 1000 / 8))
 
 
@@ -242,7 +241,8 @@ echo "██   ██ ██████   ██████  █████�
 ██   ██      ██ ██       ██          ██      ████   ██ ██      ██    ██ ██   ██ ██      ██   ██ 
 ███████  █████  ███████  ███████     █████   ██ ██  ██ ██      ██    ██ ██   ██ █████   ██████  
 ██   ██ ██      ██    ██      ██     ██      ██  ██ ██ ██      ██    ██ ██   ██ ██      ██   ██ 
-██   ██ ███████  ██████  ███████     ███████ ██   ████  ██████  ██████  ██████  ███████ ██   ██"
+██   ██ ███████  ██████  ███████     ███████ ██   ████  ██████  ██████  ██████  ███████ ██   ██
+"
 
 
 
@@ -334,23 +334,25 @@ fi
 
 print_config() {
   print_boxed_message_multiline <<EOF
-\e[1;1mCURRENT ENCODING SETTINGS\e[0m
+\e[1;1mENCODING SETTINGS\e[0m
+\e[1;33mHardware Acceleration\e[0m      ${USE_HWACCEL} (${HWACCEL_TYPE})
+\e[1;33mVideo Codec\e[0m                ${VIDEO_CODEC}
+\e[1;33mAudio Codec\e[0m                ${AUDIO_CODEC} @ ${AUDIO_BITRATE}
+\e[1;33mConstant Quality :\e[0m        
+\e[1;33m->${CQ_WIDTH_THRESHOLD}\e[0m                     ${CQ_HD}
+\e[1;33m-<${CQ_WIDTH_THRESHOLD}\e[0m                     ${CQ_SD}
+\e[1;33m-Default\e[0m                   ${CQ}
+\e[1;33mEncoding Preset\e[0m            ${ENCODE_PRESET}
 
-\e[1;33mHardware Acceleration\e[0m     ${USE_HWACCEL} (${HWACCEL_TYPE})
-\e[1;33mVideo Codec\e[0m               ${VIDEO_CODEC}
-\e[1;33mAudio Codec\e[0m               ${AUDIO_CODEC} @ ${AUDIO_BITRATE}
-\e[1;33mConstant Quality HD\e[0m       ${CQ_HD}
-\e[1;33mConstant Quality SD\e[0m       ${CQ_SD}
-\e[1;33mConstant Quality Default\e[0m  ${CQ}
-\e[1;33mEncoding Preset\e[0m           ${ENCODE_PRESET}
-\e[1;33mMinimum bitrate\e[0m           ${MIN_BITRATE}kbps
-\e[1;33mTest Clip Duration\e[0m        (3x) ${TEST_DURATION}s
-\e[1;33mMinimum Size Ratio\e[0m        ${MIN_SIZE_RATIO}
-\e[1;33m\e[0m
-\e[1;33mONE-TIME SETTINGS\e[0m  
+\e[1;1mMEDIA FILTERS\e[0m
+\e[1;33mMinimum bitrate\e[0m            ${MIN_BITRATE}kbps
+\e[1;33mTest Clip Duration\e[0m         (3x) ${TEST_DURATION}s
+\e[1;33mMinimum Size Ratio\e[0m         ${MIN_SIZE_RATIO}
+
+\e[1;1mONE-TIME SETTINGS\e[0m  
 \e[1;33mFolder\e[0m                     ${FOLDER}
 \e[1;33mRecursive\e[0m                  ${RECURSIVE}
-\e[1;33mREGEX Filter\e[0m                  ${REGEX_FILTER}
+\e[1;33mREGEX Filter\e[0m               ${REGEX_FILTER}
 \e[1;33mMinimum Size\e[0m               ${raw_min} GB
 \e[1;33mKeep original\e[0m              ${KEEP_ORIGINAL}
 \e[1;33mStop after\e[0m                 ${STOP_AFTER_HOURS}h
@@ -359,6 +361,7 @@ print_config() {
 \e[1;33mBackup directory\e[0m           ${BACKUP_DIR}
 \e[1;33mDry run\e[0m                    ${DRY_RUN}
 EOF
+ echo""
 }
 
 print_config
@@ -627,17 +630,20 @@ fi
 # Compare durations
 echo "⏳  Duration validation"
 
-new_duration=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$tmp_file")
+new_duration=""
+ffprobe_output=$(ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$tmp_file" 2>&1)
+ffprobe_status=$?
 
-# Vérifie si ffprobe a retourné une valeur numérique
-if [[ ! "$new_duration" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "├── ⚠️ Unable to read duration from encoded file, encoding rejected"
-  rm -f "$tmp_file"
+if (( ffprobe_status == 0 )) && [[ "$ffprobe_output" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  new_duration="${ffprobe_output}"
+else
+  echo "├── ⚠️ ffprobe failed or invalid duration: $ffprobe_output"
+  echo "├── ⚠️ Duration could not be validated, failing this file"
+  rm -f "$tmp_file" || true
   echo "$base" >> "$failed_file"
   continue
 fi
 
-# Convertir les durées en entier (secondes)
 new_duration_int=${new_duration%.*}
 duration_diff=$(( duration_int - new_duration_int ))
 if (( duration_diff < 0 )); then
@@ -645,16 +651,14 @@ if (( duration_diff < 0 )); then
 fi
 
 max_diff=2
-
 if (( duration_diff > max_diff )); then
   echo "├── ❌ Duration mismatch (diff: ${duration_diff}s), encoded file rejected"
-  rm -f "$tmp_file"
+  rm -f "$tmp_file" || true
   echo "$base" >> "$failed_file"
   continue
 else
   echo "├── ✅ Duration validated (diff: ${duration_diff}s)"
 fi
-
 
 echo "🎥  Video file replacement"
 
