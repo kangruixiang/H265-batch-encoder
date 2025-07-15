@@ -9,18 +9,19 @@ optionally skipping already optimized files and ignoring small files.
 Usage:
   ./script.sh [-R] [min=X] [test=Y] [--dry-run] [--keep-original] [--allow-h265] [--allow-av1] [-backup /path] <folder>
     -R              : Encode recursively inside subfolders
-    min=X.YZ        : Ignore files smaller than X.YZ GB
+    -min=X.YZ        : Ignore files smaller than X.YZ GB
     --regex="PATTERN"        Only include files matching the given regex pattern (e.g., --regex="\.avi$").
-    test=N          : Use N seconds for the test encode (default: 5)
+    -test=N          : Use N seconds for the test encode (default: 5)
     --dry-run       : Only show compatible files without encoding
-    --keep-original : Keep original files instead of replacing them
-    --allow-h265    : Allow files already encoded in H.265
-    --allow-av1     : Allow files already encoded in AV1
+    -keep-original : Keep original files instead of replacing them
+    -allow-h265    : Allow files already encoded in H.265
+    -allow-av1     : Allow files already encoded in AV1
     -backup /path   : Save original files to backup path (used only if not using --keep-original)
     --clean         : Remove temporary encoding files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
-    --purge         : Remove encoded.list files (.tmp_encode_*, .tmp_encode_test_*) from the folder(s, if combined with -R) 
+    --purge         : Remove encoded.list files from the folder(s, if combined with -R) 
+    --retry         : Remove failed.list files from the folder(s, if combined with -R) 
     -h              : Show this help message
-    --stop-after HH.5  : Stop after HH.5 hours of encoding (useful if in cron)"
+    -stop-after HH.5  : Stop after HH.5 hours of encoding (useful if in cron)"
   exit 0
 }
 
@@ -53,6 +54,8 @@ VIDEO_CODEC="hevc_nvenc"
 # Audio codec to use
 # Most compatible option: "aac"
 AUDIO_CODEC="aac"
+# For better compatibility with Chromecasts, use 1 to keep as is if 5.1
+KEEP_MULTICHANNEL_ORIGINAL_ENCODING=1
 
 # Target audio bitrate
 # Recommended: 128k (good), 192k (better), 256k+ (high quality)
@@ -132,6 +135,7 @@ CLEAN_ONLY=0
 PURGE_ONLY=0
 STOP_AFTER_HOURS=0
 REGEX_FILTER=""
+RETRY=0
 
 
 # =====================
@@ -197,6 +201,13 @@ build_ffmpeg_command() {
     container_args=(-tag:v hvc1 -movflags +faststart)
   fi
 
+  if [[ "$KEEP_MULTICHANNEL_ORIGINAL_ENCODING" == "1" ]]; then
+    channels=$(ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 "$f")
+    if [[ -z "$channels" || "$channels" -gt 2 ]]; then
+      AUDIO_CODEC="copy"
+    fi
+  fi
+
   timeout --foreground "$timeout_limit" \
     ffmpeg -y "${ffmpeg_opts[@]}" \
     -i "$input_file" \
@@ -235,6 +246,8 @@ print_boxed_message_multiline() {
     echo "$bottom"
 }
 
+
+
 clear
 
 echo "██   ██ ██████   ██████  ███████     ███████ ███    ██  ██████  ██████  ██████  ███████ ██████  
@@ -264,14 +277,15 @@ while [[ $# -gt 0 ]]; do
     min=*) raw_min="${1#min=}"; MIN_SIZE_BYTES=$(echo "$raw_min" | sed 's/,/./' | awk '{printf "%.0f", $1 * 1024 * 1024 * 1024}') ; shift ;;
     test=*) TEST_DURATION="${1#test=}"; TEST_DURATION=${TEST_DURATION%.*} ; shift ;;
     --dry-run) DRY_RUN=1 ; shift ;;
-    --keep-original) KEEP_ORIGINAL=1 ; shift ;;
-    --allow-h265) ALLOW_H265=1 ; shift ;;
-    --allow-av1) ALLOW_AV1=1 ; shift ;;
+    -keep-original) KEEP_ORIGINAL=1 ; shift ;;
+    -allow-h265) ALLOW_H265=1 ; shift ;;
+    -allow-av1) ALLOW_AV1=1 ; shift ;;
     -backup) BACKUP_DIR="$2" ; shift 2 ;;
     --clean) CLEAN_ONLY=1 ; shift ;;
     --purge) PURGE_ONLY=1 ; shift ;;
-	--stop-after) STOP_AFTER_HOURS=$(echo "$2" | sed 's/,/./' | awk '{printf "%.0f", $1}'); shift 2 ;;
-    --regex=*) REGEX_FILTER="${1#--regex=}" ; shift ;;
+    --retry) RETRY=1 ; shift ;;
+	  -stop-after) STOP_AFTER_HOURS=$(echo "$2" | sed 's/,/./' | awk '{printf "%.0f", $1}'); shift 2 ;;
+    -regex=*) REGEX_FILTER="${1#--regex=}" ; shift ;;
     -h) usage ;;
     *) [[ -z "$FOLDER" ]] && FOLDER="$1" || usage; shift ;;
   esac
@@ -304,7 +318,7 @@ fi
 # Purge encoded.list
 # =====================
 if (( PURGE_ONLY > 0 )); then
-  echo "🧹 Purging encoded.list and failed.list files..."
+  echo "🧹 Purging failed.list files..."
   find_opts=( "$FOLDER" )
   (( RECURSIVE == 0 )) && find_opts+=( -maxdepth 1 )
 
@@ -315,6 +329,18 @@ if (( PURGE_ONLY > 0 )); then
     echo "🗑️  Removing: $file"
     rm -f "$file"
   done
+
+  echo "✅ Purge complete."
+  exit 0
+fi
+
+# =====================
+# Purge failed.list
+# =====================
+if (( RETRY > 0 )); then
+  echo "🧹 Purging failed.list files..."
+  find_opts=( "$FOLDER" )
+  (( RECURSIVE == 0 )) && find_opts+=( -maxdepth 1 )
 
   patterns=( -name 'failed.list' )
 
@@ -467,6 +493,7 @@ for f in "${candidates[@]}"; do
   duration_int=${duration%.*}
   duration_view=$(printf '%02d:%02d:%02d' $((duration_int/3600)) $(( (duration_int%3600)/60 )) $((duration_int%60)))
   height=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$f" 2>/dev/null)
+  channels=$(ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 "$f")
   
   # Try to get the video width using ffprobe
   width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$f" 2>/dev/null)
