@@ -197,9 +197,9 @@ build_ffmpeg_command() {
   # Only needed for mp4 and mov to enhance compatibility with Apple products
   container_ext="${input_file##*.}"
   container_args=()
-  if [[ "$container_ext" =~ ^(mp4|mov|MP4|MOV)$ ]]; then
-    container_args=(-tag:v hvc1 -movflags +faststart)
-  fi
+#   if [[ "$container_ext" =~ ^(mp4|mov|MP4|MOV)$ ]]; then
+#     container_args=(-tag:v hvc1 -movflags +faststart)
+#   fi
 
   if [[ "$KEEP_MULTICHANNEL_ORIGINAL_ENCODING" == "1" ]]; then
     channels=$(ffprobe -v error -select_streams a:0 -show_entries stream=channels -of csv=p=0 "$f")
@@ -215,6 +215,7 @@ build_ffmpeg_command() {
     -c:v "$VIDEO_CODEC" -preset "$ENCODE_PRESET" -rc vbr -cq "$cq_value" \
     -c:a "$AUDIO_CODEC" -b:a "$AUDIO_BITRATE" \
     -c:s copy \
+    -map_metadata 0 \
     "${container_args[@]}" \
     "$output_file"
 }
@@ -529,7 +530,7 @@ for f in "${candidates[@]}"; do
   ext="${base##*.}"
   ext_lower=$(echo "$ext" | tr 'A-Z' 'a-z')
   output_ext="$ext_lower"
-  [[ "$ext_lower" == "avi" || "$ext_lower" == "mp4" ]] && output_ext="mkv"
+#   [[ "$ext_lower" == "avi" || "$ext_lower" == "mp4" ]] && output_ext="mkv"
   tmp_file="$dir/.tmp_encode_${base%.*}.$output_ext"
   tmp_test="$dir/.tmp_encode_test_${base}"
   
